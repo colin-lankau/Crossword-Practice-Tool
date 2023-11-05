@@ -5,13 +5,13 @@ import time
 # from selenium.webdriver.support import expected_conditions as EC
 # from selenium.webdriver.support.ui import WebDriverWait
 
-def Scrape(today):
+def Scrape(date: str):
 
     # setup
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--mute-audio")
     driver = webdriver.Chrome(options=chrome_options)
-    driver.get(f"https://nytcrosswordanswers.org/nyt-crossword-answers-{today}/")
+    driver.get(f"https://nytcrosswordanswers.org/nyt-crossword-answers-{date}/")
     print(driver.title)
     time.sleep(3)
 
