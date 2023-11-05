@@ -1,6 +1,7 @@
 '''
 This module is for creating a working concept for a mini grid generation algorithm
 '''
+# git add -- . :!backupCSVs/*  :!backupDBs/* :!LearningConcurrency/* :!LearningSQLite3/* :!10-06-23.txt :!Board.py :!crossword.db :!curBackup.sql :!main.py :!test.py :!__pycache__/*
 
 import random
 import sqlite3
