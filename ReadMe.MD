@@ -4,15 +4,16 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
 
 ## Current Features
 
-- Web Scrapes crossword data for the current day's NYT crossword puzzle
-- Basic Board class to store crossword information and possibly rebuild the puzzle into a playable version
+- Scrape.py - web scrapes for answer clue data
+- DatabaseFunctions.py - Manages and updates database and backups
+- miniBoard.py - class for 5x5 board, contains algorithm for generation
 
 ## TODO
 
-- Write backtracking algorithm to dynamically build crossword puzzles from database of clues and answers
-- Integrate with a database of crossword clues and answers I have from 1991-2019
-- Have the daily puzzle's clues and answers update the database daily
-- Once this is working, turn into a django application, set up with user registration, and many features for practicing crossword solving
+- Improve backtracking algorithm, make it smarter
+- Implement a random puzzle shape to the miniBoard class
+- Once miniBoard puzzle creation is working (efficiently), expand base algorithm for 15x15 puzzle
+- Possibly turn into a django or flask application, set up with user registration, and many features for practicing crossword solving
 
 ## Authors
 
@@ -22,3 +23,5 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
 
 * 0.1
     * Initial Release
+* 0.2
+    * miniBoard and Database introduction
