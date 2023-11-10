@@ -10,10 +10,12 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
 
 ## TODO
 
-- Improve backtracking algorithm, make it smarter
-- Implement a random puzzle shape to the miniBoard class
-- Once miniBoard puzzle creation is working (efficiently), expand base algorithm for 15x15 puzzle
+- Improve performance of crossword generation algorithm
+- Implement a variety of layouts to the class
+- Add clue functionality after grid creation
+- Once miniBoard puzzle creation is working (efficiently), expand base algorithm for 10x10 or 15x15 puzzle
 - Possibly turn into a django or flask application, set up with user registration, and many features for practicing crossword solving
+- Improve performance of Scrape.py using multiprocessing
 
 ## Authors
 
@@ -25,3 +27,5 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
     * Initial Release
 * 0.2
     * miniBoard and Database introduction
+* 0.3
+    * massive improvement on miniBoard generation
