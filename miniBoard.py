@@ -36,6 +36,12 @@ class Mini:
         self._board = [ [ "_" if (j,i) not in self._shape else "-" for i in range(5) ] for j in range(5) ]
         self._answers = set()
         self._previous_states = deque()
+        self._previous_fills = deque() # if go back a state in the board, don't repull from database because we already did that
+        self._previous_fills.append({})
+
+
+    def reset(self) -> None:
+        self._board = [ [ "_" if (j,i) not in self._shape else "-" for i in range(5) ] for j in range(5) ]
     
 
     def __repr__(self) -> None:
@@ -74,15 +80,21 @@ class Mini:
         '''
         Get the hardset fills left in the board and return those
         '''
+        fill_state = deepcopy(self._previous_fills[-1])
+        # print(fill_state.keys())
         result, hardest = {}, float("inf")
         for i, pat in enumerate(self._board):
             pat = ''.join(pat)
-            if '_' not in pat:
+            if '_' not in pat: # continue if word is done
                 continue
-            with con:
-                cur = con.cursor()
-                cur.execute(f"SELECT DISTINCT Answer FROM AnswerClueDB WHERE Answer LIKE '{pat}';")
-                possible_words = [ row[0] for row in cur.fetchall()]
+            if pat in fill_state: # don't go out to database if we previously checked thius pattern last cycle
+                possible_words = fill_state[pat]
+            else:
+                with con:
+                    cur = con.cursor()
+                    cur.execute(f"SELECT DISTINCT Answer FROM AnswerClueDB WHERE Answer LIKE '{pat}';")
+                    possible_words = [ row[0] for row in cur.fetchall()]
+                    fill_state[pat] = possible_words
             if len(possible_words) < hardest:
                 hardest = len(possible_words)
                 result = {
@@ -93,12 +105,16 @@ class Mini:
                 }
         columns = [ ''.join([row[i] for row in self._board]) for i in range(5) ]
         for i, pat in enumerate(columns):
-            if '_' not in pat:
+            if '_' not in pat: # continue if word is done
                 continue
-            with con:
-                cur = con.cursor()
-                cur.execute(f"SELECT DISTINCT Answer FROM AnswerClueDB WHERE Answer LIKE '{pat}';")
-                possible_words = [ row[0] for row in cur.fetchall()]
+            if pat in fill_state: # don't go out to database if we previously checked thius pattern last cycle
+                possible_words = fill_state[pat]
+            else:
+                with con:
+                    cur = con.cursor()
+                    cur.execute(f"SELECT DISTINCT Answer FROM AnswerClueDB WHERE Answer LIKE '{pat}';")
+                    possible_words = [ row[0] for row in cur.fetchall()]
+                    fill_state[pat] = possible_words
             if len(possible_words) < hardest:
                 hardest = len(possible_words)
                 result = {
@@ -107,7 +123,8 @@ class Mini:
                     'possible_words': possible_words,
                     'index': i
                 }
-        print(result)
+        # print(result)
+        self._previous_fills.append(fill_state)
         return result  
 
 
@@ -131,14 +148,14 @@ class Mini:
         Checks if board is finished or not
         '''
         # do one final check of all the answers
-        print("Checking Completion")
+        # print("Checking Completion")
         patterns = self.get_patterns(True)
         for pat in patterns:
             with con:
                 cur = con.cursor()
                 cur.execute(f"SELECT COUNT(*) FROM AnswerClueDB WHERE Answer='{pat}';")
                 count = cur.fetchone()[0]
-                print(f"Pattern: {pat}, Count: {count}")
+                # print(f"Pattern: {pat}, Count: {count}")
                 if count == 0:
                     return False
         return True
@@ -158,19 +175,23 @@ class Mini:
         # add and statement here to check all words on board are in db
         while any('_' in row for row in self._board):
 
-            print("New Iteration of loop")
+            # print("New Iteration of loop")
 
             # new step 2 - get hardset fills left for acrosses and downs
-            print("Beginning Step 2")
             data = self.get_hardest_fills(con)
 
             # step 3 - make sure we aren't infinite looping
-            print("Beginning Step 3")
             outer_flag = False
             for attempt_no in itertools.count():
                 if attempt_no > 1000:
-                    print("No new words to try, returning to previous state after 1000 attempts")
-                    self._board = self._previous_states.pop()
+                    # print("No new words to try, returning to previous state after 1000 attempts")
+                    try:
+                        self._board = self._previous_states.pop()
+                        self._previous_fills.pop()
+                    except:
+                        print("RESET")
+                        self.reset() # if we pop from an empty queue, simply restart
+                        attempt_counter.clear()
                     outer_flag = True
                     break
                 chosen_word = random.choice(data['possible_words'])
@@ -184,11 +205,11 @@ class Mini:
             attempt_counter[chosen_word] += 1
 
             # step 5 - get patterns left on the board, if the board is full, check for existence of every word in db
-            print(f"\n  ----- Beginning Step 5 -----  ")
-            print(f"Current board:\n{self}")
+            # print(f"\n  ----- Beginning Step 5 -----  ")
+            # print(f"Current board:\n{self}")
             patterns = self.get_patterns()
             flag = True
-            print(f"patterns: {patterns}")
+            # print(f"patterns: {patterns}")
             if len(patterns) == 0: # the board has no _ squares
                 finished = self.check_completion(con)
                 if finished: 
@@ -205,24 +226,46 @@ class Mini:
                             flag = False
                             break
                         else: # case 2 - all patterns exist in database -> do nothing
-                            print(f"Pattern {pat} still have {len(possible_words)} viable fills")
+                            # print(f"Pattern {pat} still have {len(possible_words)} viable fills")
+                            pass
             if flag:
-                print("Board still remains completable")
+                # print("Board still remains completable")
+                pass
             else:
-                print(f"NO MORE POSSIBLE FILLS FOR {pat}... return board to previous state")
-                self._board = self._previous_states.pop()
+                # print(f"NO MORE POSSIBLE FILLS FOR {pat}... return board to previous state")
+                try:
+                    self._board = self._previous_states.pop()
+                    self._previous_fills.pop()
+                except:
+                    print("RESET")
+                    self.reset() # if we pop from an empty queue, simply restart
+                    attempt_counter.clear()
             
             # print the queue
-            for i, state in enumerate(self._previous_states):
-                print(f"State {i}\n{state}")
+            # for i, state in enumerate(self._previous_states):
+                # print(f"State {i}\n{state}")
 
             self._previous_states.append(deepcopy(self._board))
 
 
 if __name__ == "__main__":
-    mini = Mini()
-    print(mini)
-    start_time = time.time()
-    mini.generate_grid()
-    print(f"Grid Generation took {time.time()-start_time}s")
-    print(mini)
+    # single test - time varies wildly
+    # mini = Mini()
+    # start = time.time()
+    # mini.generate_grid()
+    # runtime = start - time.time()
+    # print(f"{mini}{runtime}s\n")
+    # time test - 10 grids - 5466s - least = 57s - most = 1539s
+    # time test w/ pattern storage - 10 grids - 3808s - least = 22s - most = 1446s
+        # subsequent tries - 2010s - 2866s
+    grids = [Mini() for _ in range(10)]
+    times = []
+    for i, g in enumerate(grids):
+        start = time.time()
+        g.generate_grid()
+        runtime = start - time.time()
+        times.append(runtime)
+        print(f"Finished grid {i}")
+    for grid, runtime in zip(grids, times):
+        print(f"{grid}{runtime}s\n")
+    print(f"Total time to generate 10 grids: {sum(times)}s")
