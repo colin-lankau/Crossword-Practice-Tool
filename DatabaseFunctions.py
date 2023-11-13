@@ -8,6 +8,19 @@ import logging
 from shutil import copy
 
 
+def restoreFromBackup():
+    '''
+    Function restores db from the backup sql file
+    Useful when cloning from repo onto new computer
+    '''
+    with open('curBackup.sql', 'r') as f:
+        sql = f.read()
+    con = sqlite3.connect('crossword.db')
+    with con:
+        cur = con.cursor()
+        cur.executescript(sql)
+
+
 def updateScript():
     '''
     Main script for updating database
