@@ -10,6 +10,7 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
 
 ## TODO
 
+- FIX RESET BUG - this should greatly increase performance when I can track down the cause
 - Improve performance of crossword generation algorithm
 - Implement a variety of layouts to the class
 - Add clue functionality after grid creation
