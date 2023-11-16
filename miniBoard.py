@@ -42,6 +42,7 @@ class Mini:
 
     def reset(self) -> None:
         self._board = [ [ "_" if (j,i) not in self._shape else "-" for i in range(5) ] for j in range(5) ]
+        self._previous_states.append(deepcopy(self._board))
     
 
     def __repr__(self) -> None:
@@ -170,43 +171,53 @@ class Mini:
         # step 0 - initiate connection to database
         con = sqlite3.connect('crossword.db')
 
-        # step 1 - begin loop
+        # step 1 - begin loop and initialize
         attempt_counter = defaultdict(int)
+        self._previous_states.append(deepcopy(self._board))
         # add and statement here to check all words on board are in db
         while any('_' in row for row in self._board):
 
             # print("New Iteration of loop")
+            # print("Current Board:")
+            # print(self)
+            # print("Previous States")
+            # print(self._previous_states)
 
             # new step 2 - get hardset fills left for acrosses and downs
+            # print("Step 2- Get Hardest Fills")
             data = self.get_hardest_fills(con)
 
             # step 3 - make sure we aren't infinite looping
+            # print("Step 3- Choose word")
             outer_flag = False
             for attempt_no in itertools.count():
-                if attempt_no > 1000:
-                    # print("No new words to try, returning to previous state after 1000 attempts")
-                    try:
+                chosen_word = random.choice(data['possible_words'])
+                # print(f"Attempt {attempt_no} -- {chosen_word}")
+                if attempt_counter[chosen_word] <= 2:
+                    break
+                if attempt_no > 10 and attempt_counter[chosen_word] > 1:
+                    # print("No new words to try, returning to previous state")
+                    try: # go back 1 state
                         self._board = self._previous_states.pop()
                         self._previous_fills.pop()
                     except:
-                        print("RESET")
+                        print("RESET-1")
                         self.reset() # if we pop from an empty queue, simply restart
                         attempt_counter.clear()
                     outer_flag = True
-                    break
-                chosen_word = random.choice(data['possible_words'])
-                if attempt_counter[chosen_word] <= 2:
                     break
             if outer_flag:
                 continue
 
             # step 4 - fill word onto board
+            # print("Step 4- Fill word onto board")
             self.fill_board(chosen_word, data['direction'], data['index'])
             attempt_counter[chosen_word] += 1
 
             # step 5 - get patterns left on the board, if the board is full, check for existence of every word in db
             # print(f"\n  ----- Beginning Step 5 -----  ")
             # print(f"Current board:\n{self}")
+            # print("Step 5- check completion")
             patterns = self.get_patterns()
             flag = True
             # print(f"patterns: {patterns}")
@@ -228,16 +239,13 @@ class Mini:
                         else: # case 2 - all patterns exist in database -> do nothing
                             # print(f"Pattern {pat} still have {len(possible_words)} viable fills")
                             pass
-            if flag:
-                # print("Board still remains completable")
-                pass
-            else:
+            if not flag:
                 # print(f"NO MORE POSSIBLE FILLS FOR {pat}... return board to previous state")
                 try:
                     self._board = self._previous_states.pop()
                     self._previous_fills.pop()
                 except:
-                    print("RESET")
+                    print("RESET-2")
                     self.reset() # if we pop from an empty queue, simply restart
                     attempt_counter.clear()
             
@@ -265,7 +273,5 @@ if __name__ == "__main__":
         g.generate_grid()
         runtime = start - time.time()
         times.append(runtime)
-        print(f"Finished grid {i}")
-    for grid, runtime in zip(grids, times):
-        print(f"{grid}{runtime}s\n")
-    print(f"Total time to generate 10 grids: {sum(times)}s")
+        print(f"Finished grid {i}\n{g}{runtime}s")
+    print(f"Total time to generate {len(grids)} grids: {sum(times)}s")
