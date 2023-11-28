@@ -12,10 +12,12 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
 
 - FIX RESET BUG - this should greatly increase performance when I can track down the cause
 - Improve performance of crossword generation algorithm
-- Implement a variety of layouts to the class
-- Add clue functionality after grid creation
+- Finish clue functionality after grid creation
+- Cleanup the code for miniBoard.py
 - Once miniBoard puzzle creation is working (efficiently), expand base algorithm for 10x10 or 15x15 puzzle
-- Possibly turn into a django or flask application, set up with user registration, and many features for practicing crossword solving
+- Learn both FastAPI and React
+- Turn into a FastAPI application, set up with user registration, and many features for practicing crossword solving
+- Develop a front end for the application with React
 - Improve performance of Scrape.py using multiprocessing
 
 ## Authors
@@ -30,3 +32,5 @@ A plan for this to be a tool to be useful for those wanting to get better at NYT
     * miniBoard and Database introduction
 * 0.3
     * massive improvement on miniBoard generation
+* 0.4
+    * miniBoard generation algorithm now works with varying puzzle structure

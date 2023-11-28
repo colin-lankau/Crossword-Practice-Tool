@@ -31,13 +31,16 @@ class Mini:
 
 
     def __init__(self) -> None:
-        # self._shape = random.choices(POSSIBLE_GRIDS)[0]
-        self._shape = POSSIBLE_GRIDS[0]
-        self._board = [ [ "_" if (j,i) not in self._shape else "-" for i in range(5) ] for j in range(5) ]
-        self._answers = set()
+        self._shape = random.choices(POSSIBLE_GRIDS)[0]
+        # self._shape = POSSIBLE_GRIDS[1]
+        self._length = 5 # set it to mini size
+        self._board = [ [ "_" if (j,i) not in self._shape else "-" for i in range(self._length) ] for j in range(self._length) ]
+        self._clues = {} # maps an answer to another map, this map has days of week linked to clues for that day of week
+        self._answers = {} # maps an answer to start pos and end pos
         self._previous_states = deque()
         self._previous_fills = deque() # if go back a state in the board, don't repull from database because we already did that
         self._previous_fills.append({})
+        self._done = False
 
 
     def reset(self) -> None:
@@ -66,14 +69,16 @@ class Mini:
             if not done:
                 if '_' not in row:
                     continue
-            patterns.append(''.join(row))
+            pat = (''.join(row)).strip('-')
+            patterns.append(pat)
         # add vertical patterns
         columns = [ ''.join([row[i] for row in self._board]) for i in range(5) ]
         for col in columns:
             if not done:
                 if '_' not in col:
                     continue
-            patterns.append(col)
+            pat = (''.join(col)).strip('-')
+            patterns.append(pat)
         return set(patterns)
 
     
@@ -84,11 +89,17 @@ class Mini:
         fill_state = deepcopy(self._previous_fills[-1])
         # print(fill_state.keys())
         result, hardest = {}, float("inf")
-        for i, pat in enumerate(self._board):
-            pat = ''.join(pat)
-            if '_' not in pat: # continue if word is done
+        for i, row in enumerate(self._board):
+            if '_' not in row: # continue if row is done
                 continue
-            if pat in fill_state: # don't go out to database if we previously checked thius pattern last cycle
+            black_locations = set(i for i, char in enumerate(row) if char == '-')
+            letter_locations = set(i for i in range(self._length)) - black_locations
+            pat = ''.join(row).strip('-')
+            length = len(pat)
+            # figure out where the word starts and ends
+            start_loc = min(letter_locations)
+            end_loc = max(letter_locations)
+            if pat in fill_state: # don't go out to database if we previously checked this pattern in a previous cycle
                 possible_words = fill_state[pat]
             else:
                 with con:
@@ -102,12 +113,22 @@ class Mini:
                     'direction': 'across',
                     'pat': pat,
                     'possible_words': possible_words,
-                    'index': i
+                    'index': i,
+                    'start': start_loc,
+                    'end': end_loc,
                 }
         columns = [ ''.join([row[i] for row in self._board]) for i in range(5) ]
-        for i, pat in enumerate(columns):
-            if '_' not in pat: # continue if word is done
+        for i, col in enumerate(columns):
+            if '_' not in col: # continue if word is done
                 continue
+            black_locations = set(i for i, char in enumerate(col) if char == '-')
+            letter_locations = set(i for i in range(self._length)) - black_locations
+            # print(f"Black Locations: {black_locations}")
+            pat = ''.join(col).strip('-')
+            length = len(pat)
+            # figure out where the word starts and ends
+            start_loc = min(letter_locations)
+            end_loc = max(letter_locations)
             if pat in fill_state: # don't go out to database if we previously checked thius pattern last cycle
                 possible_words = fill_state[pat]
             else:
@@ -122,24 +143,27 @@ class Mini:
                     'direction': 'down',
                     'pat': pat,
                     'possible_words': possible_words,
-                    'index': i
+                    'start': start_loc,
+                    'index': i,
+                    'end': end_loc,
+                    'length': length
                 }
         # print(result)
         self._previous_fills.append(fill_state)
         return result  
 
 
-    def fill_board(self, word: str, direction: str, index: int) -> None:
+    def fill_board(self, word: str, direction: str, index: int, start: int, end: int) -> None:
         '''
         Fill word into desired space on board
         '''
         counter = 0
         if direction == 'across':
-            for i in range(0, 5, 1):
+            for i in range(start, end+1, 1):
                 self._board[index][i] = word[counter]
                 counter += 1
         else:
-            for i in range(0, 5, 1):
+            for i in range(start, end+1, 1):
                 self._board[i][index] = word[counter]
                 counter += 1
 
@@ -162,6 +186,28 @@ class Mini:
         return True
 
     
+    def generate_clues(self, con) -> None:
+        '''
+        Utility function to pull all of the clues from the db
+            - idea is for users to be able to select varying difficulty clues
+        '''
+        answers = self.get_patterns(True)
+        days = "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
+        clues = {
+            answer: {
+                day: [] for day in days.split(",")
+            } for answer in answers
+        }
+        with con:
+            for answer in answers:
+                cur = con.cursor()
+                cur.execute(f"SELECT DISTINCT Clue, Day_of_Week FROM AnswerClueDB WHERE Answer = '{answer}';")
+                clue_day_map = [ (row[0], row[1]) for row in cur.fetchall() ]
+                for clue, day in clue_day_map:
+                    clues[answer][day].append(clue)
+            self._clues = clues
+
+    
     def generate_grid(self) -> None:
         '''
         General idea is for a backtracking algorithm
@@ -175,7 +221,8 @@ class Mini:
         attempt_counter = defaultdict(int)
         self._previous_states.append(deepcopy(self._board))
         # add and statement here to check all words on board are in db
-        while any('_' in row for row in self._board):
+        while not self._done:
+        # while any('_' in row for row in self._board):  # change this to a self._done var or something, since we check completion after every loop anyway
 
             # print("New Iteration of loop")
             # print("Current Board:")
@@ -211,19 +258,21 @@ class Mini:
 
             # step 4 - fill word onto board
             # print("Step 4- Fill word onto board")
-            self.fill_board(chosen_word, data['direction'], data['index'])
+            self.fill_board(chosen_word, data['direction'], data['index'], data['start'], data['end'])
             attempt_counter[chosen_word] += 1
 
             # step 5 - get patterns left on the board, if the board is full, check for existence of every word in db
             # print(f"\n  ----- Beginning Step 5 -----  ")
-            # print(f"Current board:\n{self}")
+            print(f"Current board:\n{self}")
             # print("Step 5- check completion")
             patterns = self.get_patterns()
             flag = True
             # print(f"patterns: {patterns}")
             if len(patterns) == 0: # the board has no _ squares
                 finished = self.check_completion(con)
-                if finished: 
+                if finished:
+                    self._done = True
+                    self.generate_clues(con)
                     break
                 else:
                     flag = False
@@ -257,21 +306,25 @@ class Mini:
 
 
 if __name__ == "__main__":
+    # print("For test purposes only")
     # single test - time varies wildly
-    # mini = Mini()
-    # start = time.time()
-    # mini.generate_grid()
-    # runtime = start - time.time()
-    # print(f"{mini}{runtime}s\n")
+    mini = Mini()
+    start = time.time()
+    mini.generate_grid()
+    runtime = start - time.time()
+    print(f"{mini}{runtime}s\n")
     # time test - 10 grids - 5466s - least = 57s - most = 1539s
     # time test w/ pattern storage - 10 grids - 3808s - least = 22s - most = 1446s
         # subsequent tries - 2010s - 2866s
-    grids = [Mini() for _ in range(10)]
-    times = []
-    for i, g in enumerate(grids):
-        start = time.time()
-        g.generate_grid()
-        runtime = start - time.time()
-        times.append(runtime)
-        print(f"Finished grid {i}\n{g}{runtime}s")
-    print(f"Total time to generate {len(grids)} grids: {sum(times)}s")
+    # time test w/ random structure (5x5 was hardest so other structures will finish must faster)
+        # 10 grids - 
+    # grids = [Mini() for _ in range(10)]
+    # times = []
+    # for i, g in enumerate(grids):
+    #     start = time.time()
+    #     g.generate_grid()
+    #     runtime = start - time.time()
+    #     times.append(runtime)
+    #     print(f"Finished grid {i}\n{g}{runtime}s")
+    #     time.sleep(10)
+    # print(f"Total time to generate {len(grids)} grids: {sum(times)}s")
